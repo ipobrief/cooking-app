@@ -166,3 +166,15 @@ button.secondary {
     grid-template-columns: 1fr;
   }
 }
+
+.amount-input {
+  width: 110px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+.amount-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}

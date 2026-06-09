@@ -337,12 +337,12 @@ function renderSpices() {
   const spices = loadSpices();
   spiceListEl.innerHTML = "";
   if (spices.length === 0) {
-    spiceListEl.innerHTML = "<li>등록된 양념/향신료가 없습니다.</li>";
+    spiceListEl.innerHTML = "<li>등록된 조미료가 없습니다.</li>";
     return;
   }
   spices.forEach((item, index) => {
     const li = document.createElement("li");
-    li.innerHTML = `${item.name} - ${item.amount} <button data-index="spice-${index}">삭제</button>`;
+    li.innerHTML = `${item.name} - <input type="text" class="amount-input" data-edit="spice-${index}" value="${item.amount}" /> <button data-index="spice-${index}">삭제</button>`;
     spiceListEl.appendChild(li);
   });
 }
@@ -356,7 +356,7 @@ function renderInventory() {
   }
   inventory.forEach((item, index) => {
     const li = document.createElement("li");
-    li.innerHTML = `${item.name} - ${item.amount} <button data-index="inv-${index}">삭제</button>`;
+    li.innerHTML = `${item.name} - <input type="text" class="amount-input" data-edit="inv-${index}" value="${item.amount}" /> <button data-index="inv-${index}">삭제</button>`;
     inventoryListEl.appendChild(li);
   });
 }
@@ -365,7 +365,7 @@ function addSpice() {
   const name = spiceNameEl.value.trim();
   const amount = spiceAmountEl.value.trim();
   if (!name || !amount) {
-    alert("양념/향신료 이름과 수량을 모두 입력해주세요.");
+    alert("조미료 이름과 수량을 모두 입력해주세요.");
     return;
   }
   const spices = loadSpices();
@@ -383,8 +383,22 @@ function removeSpice(index) {
   renderSpices();
 }
 
+function updateSpiceAmount(index, value) {
+  const spices = loadSpices();
+  if (!spices[index]) return;
+  spices[index].amount = value.trim();
+  saveSpices(spices);
+}
+
+function updateInventoryAmount(index, value) {
+  const inventory = loadInventory();
+  if (!inventory[index]) return;
+  inventory[index].amount = value.trim();
+  saveInventory(inventory);
+}
+
 function clearSpices() {
-  if (!confirm("모든 양념/향신료 정보를 삭제하시겠습니까?")) return;
+  if (!confirm("모든 조미료 정보를 삭제하시겠습니까?")) return;
   localStorage.removeItem(spicesKey);
   renderSpices();
 }
@@ -764,7 +778,7 @@ function renderRecommendation() {
   const matchedSpices = spices.filter((item) => scaledIngredients.some((ingredientLine) => ingredientLineIncludes(item.name, ingredientLine)));
   const inventoryStatus = getMainIngredientStockStatus(ingredient, targetWeight, recipe);
 
-  const commonSpices = spices.map((item) => `${item.name} (${item.amount})`).join(" · ") || "등록된 양념/향신료가 없습니다.";
+  const commonSpices = spices.map((item) => `${item.name} (${item.amount})`).join(" · ") || "등록된 조미료가 없습니다.";
   const scaleNote = targetWeight > 0 ? `<p class="metric-note">${ingredient} ${targetWeight}g 기준으로 재료 양을 비율에 맞춰 조정했습니다.</p>` : "";
   const inventoryNote = inventoryStatus ? `<p class="metric-note">주재료 보유 상태: ${inventoryStatus.message}</p>` : "";
 
@@ -773,7 +787,7 @@ function renderRecommendation() {
     if (best.fallbackType === "sameIngredient") {
       fallbackMessage = `<p>선택한 요리 유형에 대한 레시피는 없지만, '${best.cuisine === "korean" ? "한식" : best.cuisine === "chinese" ? "중식" : "양식"}' 스타일의 ${ingredient} 레시피를 추천합니다.</p>`;
     } else if (best.fallbackType === "spiceMatch") {
-      fallbackMessage = `<p>선택한 요리 유형에서 보유한 양념/향신료와 가장 잘 맞는 레시피를 추천합니다.</p>`;
+      fallbackMessage = `<p>선택한 요리 유형에서 보유한 조미료와 가장 잘 맞는 레시피를 추천합니다.</p>`;
     }
   }
 
@@ -786,7 +800,7 @@ function renderRecommendation() {
     ${fallbackMessage}
     ${scaleNote}
     ${inventoryNote}
-    <strong>사용 가능한 보유 양념/향신료:</strong>
+    <strong>사용 가능한 보유 조미료:</strong>
     <p>${commonSpices}</p>
     <strong>레시피 재료 (미터법 기준):</strong>
     <ul class="metric-list">${scaledIngredients.map((line) => `<li>${line}</li>`).join("")}</ul>
@@ -804,11 +818,11 @@ function renderRecommendation() {
     const insuffList = availability.insufficient
       .map((item) => `${item.name} (필요 ${item.need}, 보유 ${item.have})`)
       .join(" · ");
-    recommendationEl.innerHTML += `<p><strong>부족한 양념/향신료:</strong> ${insuffList}</p>`;
+    recommendationEl.innerHTML += `<p><strong>부족한 조미료:</strong> ${insuffList}</p>`;
   }
 
   if (availability.missing.length > 0) {
-    recommendationEl.innerHTML += `<p><strong>추가로 필요한 양념/향신료:</strong> ${availability.missing.join(", ")}</p>`;
+    recommendationEl.innerHTML += `<p><strong>추가로 필요한 조미료:</strong> ${availability.missing.join(", ")}</p>`;
   }
 }
 
@@ -944,6 +958,26 @@ spiceListEl.addEventListener("click", (event) => {
     removeInventory(Number(index));
   }
 });
+function handleAmountEdit(event) {
+  const input = event.target.closest("input.amount-input");
+  if (!input) return;
+  const [type, index] = input.dataset.edit.split("-");
+  if (type === "spice") {
+    updateSpiceAmount(Number(index), input.value);
+  } else if (type === "inv") {
+    updateInventoryAmount(Number(index), input.value);
+  }
+}
+inventoryListEl.addEventListener("click", (event) => {
+  const button = event.target.closest("button");
+  if (!button) return;
+  const [type, index] = button.dataset.index.split("-");
+  if (type === "inv") {
+    removeInventory(Number(index));
+  }
+});
+spiceListEl.addEventListener("change", handleAmountEdit);
+inventoryListEl.addEventListener("change", handleAmountEdit);
 ingredientSearchEl.addEventListener("input", (event) => {
   const value = event.target.value.trim();
   if (!value) {
