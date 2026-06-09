@@ -716,6 +716,28 @@ function getInventoryRecipeScore(recipe, spices, inventory) {
   };
 }
 
+function youtubeSearchUrl(title) {
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " 레시피 만드는법")}`;
+}
+
+function cuisineLabel(cuisine) {
+  return cuisine === "korean" ? "한식" : cuisine === "chinese" ? "중식" : "양식";
+}
+
+function openRecipeDetail(ingredient, cuisine) {
+  cuisineSelect.value = cuisine;
+  const hasOption = Array.from(ingredientSelect.options).some((o) => o.value === ingredient);
+  if (!hasOption) {
+    const opt = document.createElement("option");
+    opt.value = ingredient;
+    opt.textContent = ingredient;
+    ingredientSelect.appendChild(opt);
+  }
+  ingredientSelect.value = ingredient;
+  renderRecommendation();
+  recommendationEl.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function recommendByInventory() {
   const spices = loadSpices();
   const inventory = loadInventory();
@@ -746,11 +768,11 @@ function recommendByInventory() {
       ${top
         .map(
           (item) =>
-            `<li><strong>${item.recipe.title}</strong> (${item.cuisine === "korean" ? "한식" : item.cuisine === "chinese" ? "중식" : "양식"}) — 점수 ${item.score} (${item.inventoryMatch ? "주재료 보유" : "주재료 미보유"}, 양념 점수 ${item.spiceScore})</li>`
+            `<li><a href="#" class="recipe-link" data-cuisine="${item.cuisine}" data-ingredient="${item.ingredient}"><strong>${item.recipe.title}</strong></a> (${cuisineLabel(item.cuisine)}) — 점수 ${item.score} (${item.inventoryMatch ? "주재료 보유" : "주재료 미보유"}, 양념 점수 ${item.spiceScore}) <a href="${youtubeSearchUrl(item.recipe.title)}" target="_blank" rel="noopener" class="yt-link">▶ 유튜브</a></li>`
         )
         .join("")}
     </ul>
-    <p>원하는 레시피 제목을 보고 주재료와 요리 유형을 선택하여 더 자세한 추천을 받아보세요.</p>
+    <p>레시피 제목을 클릭하면 상세 레시피가 표시됩니다. ▶ 유튜브를 누르면 영상으로 볼 수 있어요.</p>
   `;
 }
 
@@ -797,6 +819,8 @@ function renderRecommendation() {
   recommendationEl.innerHTML = `
     <h3>${recipe.title}</h3>
     <p>${recipe.description}</p>
+    <p><a href="${youtubeSearchUrl(recipe.title)}" target="_blank" rel="noopener" class="yt-link">▶ 유튜브에서 이 요리 영상 보기</a></p>
+    <p class="metric-note">※ 레시피는 앱이 제공하는 예시 데이터입니다. 실제 조리 영상은 위 유튜브 링크에서 확인하세요.</p>
     ${fallbackMessage}
     ${scaleNote}
     ${inventoryNote}
@@ -1029,6 +1053,12 @@ photoInput.addEventListener("change", async (event) => {
 saveApiKeyBtn.addEventListener("click", saveApiKey);
 clearApiKeyBtn.addEventListener("click", clearApiKey);
 renderApiKeyStatus();
+recommendationEl.addEventListener("click", (event) => {
+  const link = event.target.closest(".recipe-link");
+  if (!link) return;
+  event.preventDefault();
+  openRecipeDetail(link.dataset.ingredient, link.dataset.cuisine);
+});
 recommendBtn.addEventListener("click", renderRecommendation);
 recommendInventoryBtn.addEventListener("click", recommendByInventory);
 
