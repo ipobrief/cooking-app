@@ -17,7 +17,7 @@ const clearApiKeyBtn = document.getElementById("clearApiKey");
 const apiKeyStatusEl = document.getElementById("apiKeyStatus");
 const apiKeyStorageKey = "anthropicApiKey";
 const CLAUDE_MODEL = "claude-haiku-4-5";
-const CLAUDE_TEXT_MODEL = "claude-haiku-4-5";
+let lastPhotoFile = null;
 const generateRecipeBtn = document.getElementById("generateRecipeBtn");
 const photoPreview = document.getElementById("photoPreview");
 const ingredientSelect = document.getElementById("ingredientSelect");
@@ -62,7 +62,7 @@ const recipes = {
         "닭가슴살 300g을 먹기 좋은 크기로 썬다.",
         "간장 25ml, 다진 마늘 15g, 올리고당 15g, 참기름 10ml를 섞어 양념장을 만든다.",
         "팬에 기름을 두르고 닭가슴살을 앞뒤로 5~6분씩 굽는다.",
-        "양념장을 넣고 병아리콩 듯 조려서 완성한다."
+        "양념장을 넣고 자작하게 졸여서 완성한다."
       ]
     },
     두부: {
@@ -317,9 +317,27 @@ const recipes = {
   }
 };
 
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function loadJsonArray(key) {
+  try {
+    const stored = localStorage.getItem(key);
+    const parsed = stored ? JSON.parse(stored) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
 function loadSpices() {
-  const stored = localStorage.getItem(spicesKey);
-  return stored ? JSON.parse(stored) : [];
+  return loadJsonArray(spicesKey);
 }
 
 function saveSpices(items) {
@@ -327,8 +345,7 @@ function saveSpices(items) {
 }
 
 function loadInventory() {
-  const stored = localStorage.getItem(inventoryKey);
-  return stored ? JSON.parse(stored) : [];
+  return loadJsonArray(inventoryKey);
 }
 
 function saveInventory(items) {
@@ -344,7 +361,7 @@ function renderSpices() {
   }
   spices.forEach((item, index) => {
     const li = document.createElement("li");
-    li.innerHTML = `${item.name} - <input type="text" class="amount-input" data-edit="spice-${index}" value="${item.amount}" /> <button data-index="spice-${index}">삭제</button>`;
+    li.innerHTML = `${escapeHtml(item.name)} - <input type="text" class="amount-input" data-edit="spice-${index}" value="${escapeHtml(item.amount)}" /> <button data-index="spice-${index}">삭제</button>`;
     spiceListEl.appendChild(li);
   });
 }
@@ -358,7 +375,7 @@ function renderInventory() {
   }
   inventory.forEach((item, index) => {
     const li = document.createElement("li");
-    li.innerHTML = `${item.name} - <input type="text" class="amount-input" data-edit="inv-${index}" value="${item.amount}" /> <button data-index="inv-${index}">삭제</button>`;
+    li.innerHTML = `${escapeHtml(item.name)} - <input type="text" class="amount-input" data-edit="inv-${index}" value="${escapeHtml(item.amount)}" /> <button data-index="inv-${index}">삭제</button>`;
     inventoryListEl.appendChild(li);
   });
 }
@@ -460,7 +477,10 @@ function populateIngredientOptions() {
 function filterIngredientSelection(query) {
   const normalizedQuery = normalizeText(query);
   const filtered = ingredientOptions.filter((item) => normalizeText(item).includes(normalizedQuery));
-  if (filtered.length === 0) return;
+  if (filtered.length === 0) {
+    ingredientSelect.innerHTML = "<option value=\"\">검색 결과 없음 — 그대로 입력해 AI 생성을 이용하세요</option>";
+    return;
+  }
   ingredientSelect.innerHTML = "<option value=\"\">주재료를 선택하세요</option>";
   filtered.forEach((item) => {
     const option = document.createElement("option");
@@ -485,7 +505,7 @@ function showCandidateRecommendations(candidates) {
   if (!candidates || candidates.length === 0) return "";
   const items = candidates
     .map((candidate) => {
-      const label = `${candidate.recipe.title} (${candidate.ingredient})`;
+      const label = `${escapeHtml(candidate.recipe.title)} (${escapeHtml(candidate.ingredient)})`;
       const percent = candidate.score > 0 ? Math.round((candidate.score / candidate.recipe.ingredients.length) * 100) : 0;
       return `<li><strong>${label}</strong> — 보유 향신료 적합도 ${percent}%</li>`;
     })
@@ -660,7 +680,7 @@ function getMainIngredientStockStatus(mainIngredient, targetWeight, recipe) {
   const inventoryParsed = convertToBaseUnit(parseInventoryAmount(item.amount));
   const requiredParsed = targetWeight > 0 ? { value: targetWeight, unit: "g" } : convertToBaseUnit(recipeAmount);
   if (!requiredParsed || !inventoryParsed) {
-    return { message: `${item.name} ${item.amount}g 보유 중입니다.` };
+    return { message: `${item.name} ${item.amount} 보유 중입니다.` };
   }
   if (inventoryParsed.unit !== requiredParsed.unit) {
     return { message: `${item.name} ${item.amount} 보유 중입니다.` };
@@ -751,15 +771,27 @@ async function generateRecipeWithClaude() {
   generateRecipeBtn.disabled = true;
 
   const prompt =
-    `당신은 요리 전문가입니다. 다음 조건으로 ${cuisineLabel(cuisine)} 레시피 1개를 만들어주세요.\n` +
+    `다음 조건으로 ${cuisineLabel(cuisine)} 레시피 1개를 만들어주세요.\n` +
     `- 주재료: ${ingredient} (${weightText})\n` +
     `- 보유 조미료(가능하면 활용): ${spiceText}\n` +
+    (lastPhotoFile ? `- 첨부된 사진은 보유한 재료 사진입니다. 사진 속 재료의 양과 상태(손질 여부 등)를 참고하세요.\n` : "") +
     `- 모든 재료의 분량은 반드시 미터법(g, ml)으로 표기. 개수 단위 금지(예: '대파 1대' 금지 → '대파 50g').\n` +
     `- 보유 조미료를 우선 사용하고, 추가로 필요한 조미료가 있으면 포함하세요.\n` +
     `다른 설명 없이 아래 JSON 형식으로만 답하세요:\n` +
     `{"title":"요리 이름","description":"한 줄 설명","ingredients":["재료 분량(g/ml)", ...],"steps":["조리 단계", ...]}`;
 
   try {
+    const userContent = [];
+    if (lastPhotoFile) {
+      try {
+        const { data, mediaType } = await fileToResizedBase64(lastPhotoFile);
+        userContent.push({ type: "image", source: { type: "base64", media_type: mediaType, data } });
+      } catch (e) {
+        // 사진 변환에 실패해도 텍스트만으로 레시피 생성을 계속한다.
+      }
+    }
+    userContent.push({ type: "text", text: prompt });
+
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -769,9 +801,13 @@ async function generateRecipeWithClaude() {
         "anthropic-dangerous-direct-browser-access": "true"
       },
       body: JSON.stringify({
-        model: CLAUDE_TEXT_MODEL,
+        model: CLAUDE_MODEL,
         max_tokens: 1024,
-        messages: [{ role: "user", content: [{ type: "text", text: prompt }] }]
+        system: "당신은 요리 전문가입니다. 요청받은 형식의 JSON으로만 답합니다.",
+        messages: [
+          { role: "user", content: userContent },
+          { role: "assistant", content: [{ type: "text", text: '{"title":' }] }
+        ]
       })
     });
 
@@ -783,13 +819,14 @@ async function generateRecipeWithClaude() {
       } catch (e) {
         // ignore
       }
-      recommendationEl.innerHTML = `<p>레시피 생성 실패: ${message}</p>`;
+      recommendationEl.innerHTML = `<p>레시피 생성 실패: ${escapeHtml(message)}</p>`;
       return;
     }
 
     const result = await response.json();
     const textBlock = (result.content || []).find((b) => b.type === "text");
-    const text = textBlock ? textBlock.text : "";
+    // assistant 프리필('{"title":')로 시작을 강제했으므로 응답 앞에 다시 붙여서 파싱한다.
+    const text = '{"title":' + (textBlock ? textBlock.text : "");
     let recipe = null;
     try {
       const match = text.match(/\{[\s\S]*\}/);
@@ -804,17 +841,17 @@ async function generateRecipeWithClaude() {
     }
 
     recommendationEl.innerHTML = `
-      <h3>${recipe.title} <span class="ai-badge">AI 생성</span></h3>
-      <p>${recipe.description || ""}</p>
+      <h3>${escapeHtml(recipe.title)} <span class="ai-badge">AI 생성</span></h3>
+      <p>${escapeHtml(recipe.description || "")}</p>
       <p><a href="${youtubeSearchUrl(recipe.title)}" target="_blank" rel="noopener" class="yt-link">▶ 유튜브에서 이 요리 영상 보기</a></p>
       <strong>레시피 재료 (미터법 기준):</strong>
-      <ul class="metric-list">${recipe.ingredients.map((line) => `<li>${line}</li>`).join("")}</ul>
+      <ul class="metric-list">${recipe.ingredients.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>
       <strong>요리 단계:</strong>
-      <ol>${recipe.steps.map((step) => `<li>${step}</li>`).join("")}</ol>
+      <ol>${recipe.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ol>
       <p class="metric-note">※ Claude AI가 생성한 레시피입니다. 분량/맛은 기호에 맞게 조정하세요.</p>
     `;
   } catch (e) {
-    recommendationEl.innerHTML = `<p>레시피 생성 중 오류가 발생했습니다: ${e.message}</p>`;
+    recommendationEl.innerHTML = `<p>레시피 생성 중 오류가 발생했습니다: ${escapeHtml(e.message)}</p>`;
   } finally {
     generateRecipeBtn.disabled = false;
   }
@@ -872,7 +909,7 @@ function recommendByInventory() {
       ${top
         .map(
           (item) =>
-            `<li><a href="#" class="recipe-link" data-cuisine="${item.cuisine}" data-ingredient="${item.ingredient}"><strong>${item.recipe.title}</strong></a> (${cuisineLabel(item.cuisine)}) — 점수 ${item.score} (${item.inventoryMatch ? "주재료 보유" : "주재료 미보유"}, 양념 점수 ${item.spiceScore}) <a href="${youtubeSearchUrl(item.recipe.title)}" target="_blank" rel="noopener" class="yt-link">▶ 유튜브</a></li>`
+            `<li><a href="#" class="recipe-link" data-cuisine="${escapeHtml(item.cuisine)}" data-ingredient="${escapeHtml(item.ingredient)}"><strong>${escapeHtml(item.recipe.title)}</strong></a> (${cuisineLabel(item.cuisine)}) — 점수 ${item.score} (${item.inventoryMatch ? "주재료 보유" : "주재료 미보유"}, 양념 점수 ${item.spiceScore}) <a href="${youtubeSearchUrl(item.recipe.title)}" target="_blank" rel="noopener" class="yt-link">▶ 유튜브</a></li>`
         )
         .join("")}
     </ul>
@@ -894,7 +931,12 @@ function renderRecommendation() {
 
   const best = findBestRecipe(ingredient, cuisine, spices);
   if (!best || !best.recipe) {
-    recommendationEl.innerHTML = `<p>선택한 재료에 대한 ${cuisine === "korean" ? "한식" : cuisine === "chinese" ? "중식" : "양식"} 요리법이 준비 중입니다.</p>`;
+    recommendationEl.innerHTML = `<p>선택한 재료에 대한 ${cuisineLabel(cuisine)} 내장 레시피가 없습니다. '✨ AI 레시피 생성받기' 버튼을 누르면 ${escapeHtml(ingredient)} 레시피를 만들어드려요.</p>`;
+    return;
+  }
+
+  if (!best.exactMatch && !hasBuiltinRecipe(ingredient)) {
+    recommendationEl.innerHTML = `<p>'${escapeHtml(ingredient)}'에 대한 내장 레시피가 없습니다. '✨ AI 레시피 생성받기' 버튼을 누르면 ${cuisineLabel(cuisine)} 레시피를 만들어드려요.</p>`;
     return;
   }
 
@@ -904,14 +946,14 @@ function renderRecommendation() {
   const matchedSpices = spices.filter((item) => scaledIngredients.some((ingredientLine) => ingredientLineIncludes(item.name, ingredientLine)));
   const inventoryStatus = getMainIngredientStockStatus(ingredient, targetWeight, recipe);
 
-  const commonSpices = spices.map((item) => `${item.name} (${item.amount})`).join(" · ") || "등록된 조미료가 없습니다.";
-  const scaleNote = targetWeight > 0 ? `<p class="metric-note">${ingredient} ${targetWeight}g 기준으로 재료 양을 비율에 맞춰 조정했습니다.</p>` : "";
-  const inventoryNote = inventoryStatus ? `<p class="metric-note">주재료 보유 상태: ${inventoryStatus.message}</p>` : "";
+  const commonSpices = spices.map((item) => `${escapeHtml(item.name)} (${escapeHtml(item.amount)})`).join(" · ") || "등록된 조미료가 없습니다.";
+  const scaleNote = targetWeight > 0 ? `<p class="metric-note">${escapeHtml(ingredient)} ${targetWeight}g 기준으로 재료 양을 비율에 맞춰 조정했습니다.</p>` : "";
+  const inventoryNote = inventoryStatus ? `<p class="metric-note">주재료 보유 상태: ${escapeHtml(inventoryStatus.message)}</p>` : "";
 
   let fallbackMessage = "";
   if (!best.exactMatch) {
     if (best.fallbackType === "sameIngredient") {
-      fallbackMessage = `<p>선택한 요리 유형에 대한 레시피는 없지만, '${best.cuisine === "korean" ? "한식" : best.cuisine === "chinese" ? "중식" : "양식"}' 스타일의 ${ingredient} 레시피를 추천합니다.</p>`;
+      fallbackMessage = `<p>선택한 요리 유형에 대한 레시피는 없지만, '${cuisineLabel(best.cuisine)}' 스타일의 ${escapeHtml(ingredient)} 레시피를 추천합니다.</p>`;
     } else if (best.fallbackType === "spiceMatch") {
       fallbackMessage = `<p>선택한 요리 유형에서 보유한 조미료와 가장 잘 맞는 레시피를 추천합니다.</p>`;
     }
@@ -921,8 +963,8 @@ function renderRecommendation() {
   const extraRecommendations = topCandidates.length > 0 ? showCandidateRecommendations(topCandidates.filter((item) => item.recipe.title !== recipe.title)) : "";
 
   recommendationEl.innerHTML = `
-    <h3>${recipe.title}</h3>
-    <p>${recipe.description}</p>
+    <h3>${escapeHtml(recipe.title)}</h3>
+    <p>${escapeHtml(recipe.description)}</p>
     <p><a href="${youtubeSearchUrl(recipe.title)}" target="_blank" rel="noopener" class="yt-link">▶ 유튜브에서 이 요리 영상 보기</a></p>
     <p class="metric-note">※ 레시피는 앱이 제공하는 예시 데이터입니다. 실제 조리 영상은 위 유튜브 링크에서 확인하세요.</p>
     ${fallbackMessage}
@@ -938,19 +980,19 @@ function renderRecommendation() {
   `;
 
   if (matchedSpices.length > 0) {
-    const matchedList = matchedSpices.map((item) => `${item.name} (${item.amount})`).join(" · ");
+    const matchedList = matchedSpices.map((item) => `${escapeHtml(item.name)} (${escapeHtml(item.amount)})`).join(" · ");
     recommendationEl.innerHTML += `<p><strong>추천: 보유한 향신료가 포함되었습니다.</strong><br>${matchedList}</p>`;
   }
 
   if (availability.insufficient.length > 0) {
     const insuffList = availability.insufficient
-      .map((item) => `${item.name} (필요 ${item.need}, 보유 ${item.have})`)
+      .map((item) => `${escapeHtml(item.name)} (필요 ${escapeHtml(item.need)}, 보유 ${escapeHtml(item.have)})`)
       .join(" · ");
     recommendationEl.innerHTML += `<p><strong>부족한 조미료:</strong> ${insuffList}</p>`;
   }
 
   if (availability.missing.length > 0) {
-    recommendationEl.innerHTML += `<p><strong>추가로 필요한 조미료:</strong> ${availability.missing.join(", ")}</p>`;
+    recommendationEl.innerHTML += `<p><strong>추가로 필요한 조미료:</strong> ${availability.missing.map(escapeHtml).join(", ")}</p>`;
   }
 }
 
@@ -1003,12 +1045,42 @@ function fileToBase64(file) {
   });
 }
 
+// 스마트폰 원본 사진은 API 이미지 크기 제한(약 5MB)을 넘기 쉬워 긴 변 1024px로 줄여서 전송한다.
+const MAX_IMAGE_DIMENSION = 1024;
+
+function fileToResizedBase64(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const longest = Math.max(img.width, img.height);
+      const scale = longest > MAX_IMAGE_DIMENSION ? MAX_IMAGE_DIMENSION / longest : 1;
+      if (scale === 1 && file.size < 1024 * 1024) {
+        fileToBase64(file).then(resolve, reject);
+        return;
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      resolve({ data: dataUrl.split(",")[1], mediaType: "image/jpeg" });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      fileToBase64(file).then(resolve, reject);
+    };
+    img.src = url;
+  });
+}
+
 async function detectIngredientsWithClaude(file) {
   const key = loadApiKey();
   if (!key) {
     return { ok: false, reason: "no-key" };
   }
-  const { data, mediaType } = await fileToBase64(file);
+  const { data, mediaType } = await fileToResizedBase64(file);
   const prompt =
     "이 사진에 보이는 '요리 주재료'(채소, 육류, 해산물, 두부 등)를 한국어 이름으로만 식별해줘. " +
     "양념이나 향신료는 제외하고, 주재료만 쉼표로 구분된 JSON 배열로 답해줘. " +
@@ -1117,8 +1189,13 @@ ingredientSearchEl.addEventListener("input", (event) => {
     ingredientSelect.value = value;
   }
 });
+function hasBuiltinRecipe(ingredient) {
+  return Object.values(recipes).some((list) => Boolean(list[ingredient]));
+}
+
 photoInput.addEventListener("change", async (event) => {
   const file = event.target.files[0];
+  lastPhotoFile = file || null;
   showPhotoPreview(file);
   if (!file) {
     photoHintEl.textContent = "사진을 업로드하면 해당 재료를 자동으로 추천합니다.";
@@ -1132,7 +1209,9 @@ photoInput.addEventListener("change", async (event) => {
       const detection = await detectIngredientsWithClaude(file);
       if (detection.ok && detection.ingredients.length > 0) {
         fillIngredientSelect(detection.ingredients);
-        photoHintEl.textContent = `사진에서 ${detection.ingredients.join(" / ")}를(을) 인식했습니다. 주재료를 선택하세요.`;
+        const noBuiltin = detection.ingredients.every((item) => !hasBuiltinRecipe(item));
+        photoHintEl.textContent = `사진에서 ${detection.ingredients.join(" / ")}를(을) 인식했습니다. 주재료를 선택하세요.` +
+          (noBuiltin ? " 내장 레시피에 없는 재료이니 '✨ AI 레시피 생성받기'를 이용해보세요." : "");
         return;
       }
       if (detection.ok) {
