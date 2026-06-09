@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>요리 재료 추천 앱</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>요리 재료 사진으로 레시피 추천</h1>
+      <p>사진을 찍거나 업로드하고, 보유한 양념/향신료를 기록하면 미터법(g) 기반 요리를 추천합니다.</p>
+    </header>
+
+    <section class="card">
+      <h2>1. 양념/향신료 보유 기록</h2>
+      <div class="form-grid">
+        <input id="spiceName" type="text" placeholder="향신료 이름 (예: 간장, 다진 마늘)" />
+        <input id="spiceAmount" type="text" placeholder="수량(예: 50g, 30ml)" />
+        <button id="addSpice">추가</button>
+      </div>
+      <ul id="spiceList"></ul>
+      <button id="clearSpices" class="secondary">모두 지우기</button>
+    </section>
+
+    <section class="card">
+      <h2>1-1. 주재료 보유 기록</h2>
+      <div class="form-grid">
+        <input id="mainIngredientName" list="ingredientSuggestions" placeholder="주재료 이름 입력(예: 닭가슴살)" />
+        <input id="mainIngredientAmount" type="number" min="0" placeholder="보유량(g) 입력" />
+        <button id="addInventory">추가</button>
+      </div>
+      <ul id="inventoryList"></ul>
+      <button id="clearInventory" class="secondary">모두 지우기</button>
+    </section>
+
+    <section class="card">
+      <h2>2. 주재료 사진 업로드</h2>
+      <p>사진을 업로드하면 주재료를 선택할 수 있는 추천 재료를 보여줍니다.</p>
+      <input id="photoInput" type="file" accept="image/*" capture="environment" />
+      <div id="photoPreview" class="preview"></div>
+      <p id="photoHint" class="photo-hint">사진을 업로드하면 해당 재료를 자동으로 추천합니다.</p>
+      <div class="form-grid">
+        <input id="ingredientSearch" list="ingredientSuggestions" placeholder="재료 직접 입력 또는 검색" />
+      </div>
+      <datalist id="ingredientSuggestions"></datalist>
+      <div class="form-grid">
+        <select id="ingredientSelect">
+          <option value="">주재료를 선택하세요</option>
+        </select>
+        <input id="mainAmount" type="number" min="0" placeholder="주재료 중량(g) 입력" />
+        <select id="cuisineSelect">
+          <option value="">요리 유형 선택</option>
+          <option value="korean">한식</option>
+          <option value="chinese">중식</option>
+          <option value="western">양식</option>
+        </select>
+      </div>
+      <div class="action-row">
+        <button id="recommendBtn">요리법 추천받기</button>
+        <button id="recommendInventoryBtn" class="secondary">내 보유 재료로 추천받기</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>3. 추천 요리법</h2>
+      <div id="recommendation"></div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

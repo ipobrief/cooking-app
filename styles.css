@@ -1,0 +1,168 @@
+:root {
+  --bg: #f6f3ef;
+  --card: #ffffff;
+  --text: #2d2a26;
+  --accent: #d15c34;
+  --muted: #6a5a4f;
+  --border: #e4d9cf;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Noto Sans KR", sans-serif;
+  background: linear-gradient(180deg, #fbf8f4 0%, #efe6db 100%);
+  color: var(--text);
+}
+
+.container {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 2.4rem;
+}
+
+p {
+  margin: 12px auto 0;
+  max-width: 780px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 22px;
+  margin-bottom: 22px;
+  box-shadow: 0 16px 35px rgba(50, 38, 22, 0.08);
+}
+
+.card h2 {
+  margin-top: 0;
+}
+
+.form-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: center;
+  margin-top: 16px;
+}
+
+input[type="text"], input[type="file"], select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 1rem;
+}
+
+button {
+  padding: 12px 16px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
+  background: var(--accent);
+  color: #fff;
+}
+
+button.secondary {
+  background: #837263;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.action-row button {
+  flex: 1;
+}
+
+#spiceList {
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+#spiceList li {
+  padding: 10px 14px;
+  border: 1px solid #e4d9cf;
+  border-radius: 12px;
+  margin-bottom: 10px;
+  background: #faf5f0;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#spiceList button {
+  background: transparent;
+  color: var(--accent);
+  font-weight: 700;
+  padding: 0;
+}
+
+.preview {
+  margin-top: 16px;
+  border: 1px dashed var(--border);
+  min-height: 140px;
+  border-radius: 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  background: #fff8f3;
+}
+
+.preview img {
+  max-width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+}
+
+#recommendation {
+  line-height: 1.7;
+}
+
+.photo-hint {
+  margin: 12px 0 0;
+  color: #7b675c;
+}
+
+#recommendation h3 {
+  margin-top: 0;
+}
+
+.metric-note {
+  font-size: 0.95rem;
+  color: #7b675c;
+  margin-top: 10px;
+}
+
+.metric-list {
+  margin: 12px 0;
+  padding-left: 18px;
+}
+
+@media (max-width: 760px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
