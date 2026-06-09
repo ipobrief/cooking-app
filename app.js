@@ -11,6 +11,12 @@ const mainIngredientAmountEl = document.getElementById("mainIngredientAmount");
 const addInventoryBtn = document.getElementById("addInventory");
 const clearInventoryBtn = document.getElementById("clearInventory");
 const photoInput = document.getElementById("photoInput");
+const apiKeyEl = document.getElementById("apiKey");
+const saveApiKeyBtn = document.getElementById("saveApiKey");
+const clearApiKeyBtn = document.getElementById("clearApiKey");
+const apiKeyStatusEl = document.getElementById("apiKeyStatus");
+const apiKeyStorageKey = "anthropicApiKey";
+const CLAUDE_MODEL = "claude-haiku-4-5";
 const photoPreview = document.getElementById("photoPreview");
 const ingredientSelect = document.getElementById("ingredientSelect");
 const ingredientSearchEl = document.getElementById("ingredientSearch");
@@ -812,6 +818,118 @@ function ingredientLineIncludes(name, line) {
   return normalizedLine.includes(normalizedName);
 }
 
+function loadApiKey() {
+  return localStorage.getItem(apiKeyStorageKey) || "";
+}
+
+function renderApiKeyStatus() {
+  const key = loadApiKey();
+  if (key) {
+    apiKeyEl.value = key;
+    apiKeyStatusEl.textContent = "✅ API 키가 저장되어 있습니다. 사진을 업로드하면 자동 인식됩니다.";
+  } else {
+    apiKeyStatusEl.textContent = "⚠️ API 키가 없습니다. 키 없이도 수동 선택은 가능하지만, 사진 자동 인식은 키가 필요합니다.";
+  }
+}
+
+function saveApiKey() {
+  const key = apiKeyEl.value.trim();
+  if (!key) {
+    apiKeyStatusEl.textContent = "키를 입력해주세요.";
+    return;
+  }
+  localStorage.setItem(apiKeyStorageKey, key);
+  renderApiKeyStatus();
+}
+
+function clearApiKey() {
+  localStorage.removeItem(apiKeyStorageKey);
+  apiKeyEl.value = "";
+  renderApiKeyStatus();
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      const base64 = String(result).split(",")[1];
+      resolve({ data: base64, mediaType: file.type || "image/jpeg" });
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function detectIngredientsWithClaude(file) {
+  const key = loadApiKey();
+  if (!key) {
+    return { ok: false, reason: "no-key" };
+  }
+  const { data, mediaType } = await fileToBase64(file);
+  const prompt =
+    "이 사진에 보이는 '요리 주재료'(채소, 육류, 해산물, 두부 등)를 한국어 이름으로만 식별해줘. " +
+    "양념이나 향신료는 제외하고, 주재료만 쉼표로 구분된 JSON 배열로 답해줘. " +
+    '예: ["닭가슴살", "양파", "감자"]. 다른 설명 없이 JSON 배열만 출력해.';
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
+    body: JSON.stringify({
+      model: CLAUDE_MODEL,
+      max_tokens: 256,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: mediaType, data } },
+            { type: "text", text: prompt }
+          ]
+        }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    let message = `HTTP ${response.status}`;
+    try {
+      const err = await response.json();
+      if (err && err.error && err.error.message) message = err.error.message;
+    } catch (e) {
+      // ignore parse error
+    }
+    return { ok: false, reason: "api-error", message };
+  }
+
+  const result = await response.json();
+  const textBlock = (result.content || []).find((b) => b.type === "text");
+  const text = textBlock ? textBlock.text : "";
+  let ingredients = [];
+  try {
+    const match = text.match(/\[[\s\S]*\]/);
+    if (match) ingredients = JSON.parse(match[0]);
+  } catch (e) {
+    ingredients = [];
+  }
+  ingredients = ingredients.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim());
+  return { ok: true, ingredients };
+}
+
+function fillIngredientSelect(options) {
+  ingredientSelect.innerHTML = "<option value=\"\">주재료를 선택하세요</option>";
+  options.forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item;
+    option.textContent = item;
+    ingredientSelect.appendChild(option);
+  });
+}
+
 addSpiceBtn.addEventListener("click", addSpice);
 addInventoryBtn.addEventListener("click", addInventory);
 clearSpicesBtn.addEventListener("click", clearSpices);
@@ -837,27 +955,46 @@ ingredientSearchEl.addEventListener("input", (event) => {
     ingredientSelect.value = value;
   }
 });
-photoInput.addEventListener("change", (event) => {
+photoInput.addEventListener("change", async (event) => {
   const file = event.target.files[0];
   showPhotoPreview(file);
-  if (file) {
-    const detectedIngredients = detectIngredientsFromFileName(file.name);
-    const options = detectedIngredients.length > 0 ? detectedIngredients : ["닭가슴살", "두부", "양파", "감자", "버섯"];
-    ingredientSelect.innerHTML = "<option value=\"\">주재료를 선택하세요</option>";
-    options.forEach((item) => {
-      const option = document.createElement("option");
-      option.value = item;
-      option.textContent = item;
-      ingredientSelect.appendChild(option);
-    });
-    photoHintEl.textContent = detectedIngredients.length > 0
-      ? `사진에서 ${detectedIngredients.join(" / ")}를(을) 감지했습니다. 필요하면 주재료를 선택하세요.`
-      : "사진에서 재료를 자동으로 분석하지 못했습니다. 아래에서 주재료를 선택해주세요.";
-    recommendationEl.innerHTML = "";
-  } else {
+  if (!file) {
     photoHintEl.textContent = "사진을 업로드하면 해당 재료를 자동으로 추천합니다.";
+    return;
+  }
+  recommendationEl.innerHTML = "";
+
+  if (loadApiKey()) {
+    photoHintEl.textContent = "🔍 Claude AI가 사진 속 재료를 분석 중입니다...";
+    try {
+      const detection = await detectIngredientsWithClaude(file);
+      if (detection.ok && detection.ingredients.length > 0) {
+        fillIngredientSelect(detection.ingredients);
+        photoHintEl.textContent = `사진에서 ${detection.ingredients.join(" / ")}를(을) 인식했습니다. 주재료를 선택하세요.`;
+        return;
+      }
+      if (detection.ok) {
+        photoHintEl.textContent = "사진에서 주재료를 찾지 못했습니다. 아래에서 직접 선택해주세요.";
+      } else if (detection.reason === "api-error") {
+        photoHintEl.textContent = `AI 분석 실패: ${detection.message}. 아래에서 직접 선택해주세요.`;
+      }
+    } catch (e) {
+      photoHintEl.textContent = `AI 분석 중 오류가 발생했습니다 (${e.message}). 아래에서 직접 선택해주세요.`;
+    }
+  }
+
+  // API 키가 없거나 인식 실패 시: 파일명 기반 추측 + 기본 후보
+  const detectedIngredients = detectIngredientsFromFileName(file.name);
+  const options = detectedIngredients.length > 0 ? detectedIngredients : ["닭가슴살", "두부", "양파", "감자", "버섯"];
+  fillIngredientSelect(options);
+  if (!loadApiKey()) {
+    photoHintEl.textContent = "API 키를 입력하면 사진 속 재료를 자동 인식합니다. 지금은 아래에서 직접 선택해주세요.";
   }
 });
+
+saveApiKeyBtn.addEventListener("click", saveApiKey);
+clearApiKeyBtn.addEventListener("click", clearApiKey);
+renderApiKeyStatus();
 recommendBtn.addEventListener("click", renderRecommendation);
 recommendInventoryBtn.addEventListener("click", recommendByInventory);
 

@@ -8,6 +8,14 @@
 2. `serve.bat` 파일을 더블 클릭하거나 터미널에서 실행하면 Chrome에서 `http://localhost:8001` 로 열립니다.
    - 또는 `python -m http.server 8001` 를 실행한 뒤 `http://localhost:8001` 으로 접속
 
+## Claude AI 사진 인식 설정
+
+1. [Anthropic Console](https://console.anthropic.com/)에서 API 키(`sk-ant-...`)를 발급받습니다.
+2. 앱 상단 "0. Claude API 키 설정"에 키를 입력하고 저장합니다.
+   - 키는 **브라우저(localStorage)에만 저장**되며 깃허브/서버로 전송되지 않습니다.
+3. 주재료 사진을 업로드하면 Claude(`claude-haiku-4-5`, 비전)가 재료를 자동 인식합니다.
+   - 모델은 `app.js`의 `CLAUDE_MODEL` 상수에서 변경할 수 있습니다.
+
 ## 기능
 
 - 양념/향신료를 입력하고 저장
