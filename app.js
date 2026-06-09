@@ -719,20 +719,24 @@ function getInventoryRecipeScore(recipe, spices, inventory) {
 }
 
 async function generateRecipeWithClaude() {
+  const showMessage = (html) => {
+    recommendationEl.innerHTML = html;
+    recommendationEl.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   const key = loadApiKey();
   if (!key) {
-    recommendationEl.innerHTML = "<p>AI 레시피 생성은 Claude API 키가 필요합니다. 상단 '0. Claude API 키 설정'에서 키를 입력해주세요.</p>";
+    showMessage("<p>AI 레시피 생성은 Claude API 키가 필요합니다. 상단 '0. Claude API 키 설정'에서 키를 입력해주세요.</p>");
     return;
   }
   const ingredient = (ingredientSelect.value || ingredientSearchEl.value || "").trim();
   const cuisine = cuisineSelect.value;
   const targetWeight = Number(targetWeightEl.value);
   if (!ingredient) {
-    recommendationEl.innerHTML = "<p>주재료를 선택하거나 입력한 뒤 생성받기를 눌러주세요.</p>";
+    showMessage("<p>주재료를 선택하거나 입력한 뒤 생성받기를 눌러주세요.</p>");
     return;
   }
   if (!cuisine) {
-    recommendationEl.innerHTML = "<p>요리 유형(한식/중식/양식)을 선택한 뒤 생성받기를 눌러주세요.</p>";
+    showMessage("<p>요리 유형(한식/중식/양식)을 선택한 뒤 생성받기를 눌러주세요.</p>");
     return;
   }
 
@@ -743,6 +747,7 @@ async function generateRecipeWithClaude() {
   const weightText = targetWeight > 0 ? `주재료 약 ${targetWeight}g 기준` : "1~2인분 기준";
 
   recommendationEl.innerHTML = "<p>✨ Claude가 레시피를 생성 중입니다... 잠시만 기다려주세요.</p>";
+  recommendationEl.scrollIntoView({ behavior: "smooth", block: "start" });
   generateRecipeBtn.disabled = true;
 
   const prompt =
