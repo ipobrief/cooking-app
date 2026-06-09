@@ -17,6 +17,8 @@ const clearApiKeyBtn = document.getElementById("clearApiKey");
 const apiKeyStatusEl = document.getElementById("apiKeyStatus");
 const apiKeyStorageKey = "anthropicApiKey";
 const CLAUDE_MODEL = "claude-haiku-4-5";
+const CLAUDE_TEXT_MODEL = "claude-haiku-4-5";
+const generateRecipeBtn = document.getElementById("generateRecipeBtn");
 const photoPreview = document.getElementById("photoPreview");
 const ingredientSelect = document.getElementById("ingredientSelect");
 const ingredientSearchEl = document.getElementById("ingredientSearch");
@@ -716,6 +718,103 @@ function getInventoryRecipeScore(recipe, spices, inventory) {
   };
 }
 
+async function generateRecipeWithClaude() {
+  const key = loadApiKey();
+  if (!key) {
+    recommendationEl.innerHTML = "<p>AI 레시피 생성은 Claude API 키가 필요합니다. 상단 '0. Claude API 키 설정'에서 키를 입력해주세요.</p>";
+    return;
+  }
+  const ingredient = (ingredientSelect.value || ingredientSearchEl.value || "").trim();
+  const cuisine = cuisineSelect.value;
+  const targetWeight = Number(targetWeightEl.value);
+  if (!ingredient) {
+    recommendationEl.innerHTML = "<p>주재료를 선택하거나 입력한 뒤 생성받기를 눌러주세요.</p>";
+    return;
+  }
+  if (!cuisine) {
+    recommendationEl.innerHTML = "<p>요리 유형(한식/중식/양식)을 선택한 뒤 생성받기를 눌러주세요.</p>";
+    return;
+  }
+
+  const spices = loadSpices();
+  const spiceText = spices.length > 0
+    ? spices.map((s) => `${s.name} ${s.amount}`).join(", ")
+    : "(보유한 조미료 없음)";
+  const weightText = targetWeight > 0 ? `주재료 약 ${targetWeight}g 기준` : "1~2인분 기준";
+
+  recommendationEl.innerHTML = "<p>✨ Claude가 레시피를 생성 중입니다... 잠시만 기다려주세요.</p>";
+  generateRecipeBtn.disabled = true;
+
+  const prompt =
+    `당신은 요리 전문가입니다. 다음 조건으로 ${cuisineLabel(cuisine)} 레시피 1개를 만들어주세요.\n` +
+    `- 주재료: ${ingredient} (${weightText})\n` +
+    `- 보유 조미료(가능하면 활용): ${spiceText}\n` +
+    `- 모든 재료의 분량은 반드시 미터법(g, ml)으로 표기. 개수 단위 금지(예: '대파 1대' 금지 → '대파 50g').\n` +
+    `- 보유 조미료를 우선 사용하고, 추가로 필요한 조미료가 있으면 포함하세요.\n` +
+    `다른 설명 없이 아래 JSON 형식으로만 답하세요:\n` +
+    `{"title":"요리 이름","description":"한 줄 설명","ingredients":["재료 분량(g/ml)", ...],"steps":["조리 단계", ...]}`;
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify({
+        model: CLAUDE_TEXT_MODEL,
+        max_tokens: 1024,
+        messages: [{ role: "user", content: [{ type: "text", text: prompt }] }]
+      })
+    });
+
+    if (!response.ok) {
+      let message = `HTTP ${response.status}`;
+      try {
+        const err = await response.json();
+        if (err && err.error && err.error.message) message = err.error.message;
+      } catch (e) {
+        // ignore
+      }
+      recommendationEl.innerHTML = `<p>레시피 생성 실패: ${message}</p>`;
+      return;
+    }
+
+    const result = await response.json();
+    const textBlock = (result.content || []).find((b) => b.type === "text");
+    const text = textBlock ? textBlock.text : "";
+    let recipe = null;
+    try {
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) recipe = JSON.parse(match[0]);
+    } catch (e) {
+      recipe = null;
+    }
+
+    if (!recipe || !recipe.title || !Array.isArray(recipe.ingredients) || !Array.isArray(recipe.steps)) {
+      recommendationEl.innerHTML = `<p>레시피를 해석하지 못했습니다. 다시 시도해주세요.</p>`;
+      return;
+    }
+
+    recommendationEl.innerHTML = `
+      <h3>${recipe.title} <span class="ai-badge">AI 생성</span></h3>
+      <p>${recipe.description || ""}</p>
+      <p><a href="${youtubeSearchUrl(recipe.title)}" target="_blank" rel="noopener" class="yt-link">▶ 유튜브에서 이 요리 영상 보기</a></p>
+      <strong>레시피 재료 (미터법 기준):</strong>
+      <ul class="metric-list">${recipe.ingredients.map((line) => `<li>${line}</li>`).join("")}</ul>
+      <strong>요리 단계:</strong>
+      <ol>${recipe.steps.map((step) => `<li>${step}</li>`).join("")}</ol>
+      <p class="metric-note">※ Claude AI가 생성한 레시피입니다. 분량/맛은 기호에 맞게 조정하세요.</p>
+    `;
+  } catch (e) {
+    recommendationEl.innerHTML = `<p>레시피 생성 중 오류가 발생했습니다: ${e.message}</p>`;
+  } finally {
+    generateRecipeBtn.disabled = false;
+  }
+}
+
 function youtubeSearchUrl(title) {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " 레시피 만드는법")}`;
 }
@@ -1060,6 +1159,7 @@ recommendationEl.addEventListener("click", (event) => {
   openRecipeDetail(link.dataset.ingredient, link.dataset.cuisine);
 });
 recommendBtn.addEventListener("click", renderRecommendation);
+generateRecipeBtn.addEventListener("click", generateRecipeWithClaude);
 recommendInventoryBtn.addEventListener("click", recommendByInventory);
 
 populateIngredientOptions();
